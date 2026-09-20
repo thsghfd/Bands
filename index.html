@@ -1,0 +1,1628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Table Order Board</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=Inter:wght@400;500;600;700&display=swap');
+
+  :root{
+    --paper:#F7F4EC;
+    --paper-dim:#EDE8DC;
+    --ink:#2B2A25;
+    --ink-soft:#6b6a60;
+    --mustard:#D98E04;
+    --tomato:#C1440E;
+    --sage:#5C7A52;
+    --line:#D8D2C2;
+    --stub-w: min(58px, 8vw);
+  }
+
+  *{ box-sizing:border-box; }
+
+  body{
+    margin:0;
+    background:var(--paper);
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 28px 28px;
+    background-position: -1px -1px;
+    color:var(--ink);
+    font-family:'Inter', sans-serif;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding: 32px 16px 80px;
+  }
+
+  header{
+    text-align:center;
+    margin-bottom:22px;
+  }
+  header .eyebrow{
+    font-family:'Courier Prime', monospace;
+    letter-spacing:.18em;
+    text-transform:uppercase;
+    font-size:12px;
+    color:var(--tomato);
+    margin-bottom:6px;
+  }
+  header h1{
+    font-family:'Courier Prime', monospace;
+    font-weight:700;
+    font-size:clamp(24px,4vw,34px);
+    margin:0 0 6px;
+  }
+  header p{
+    margin:0;
+    color:var(--ink-soft);
+    font-size:14px;
+  }
+
+  .tabs{
+    display:flex;
+    gap:6px;
+    background:var(--paper-dim);
+    border:1px solid var(--line);
+    border-radius:999px;
+    padding:4px;
+    margin-bottom:16px;
+  }
+  .tab-btn{
+    font-family:'Courier Prime', monospace;
+    font-size:12px;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    padding:9px 18px;
+    border-radius:999px;
+    border:none;
+    background:transparent;
+    color:var(--ink-soft);
+    cursor:pointer;
+    transition: background .15s ease, color .15s ease;
+  }
+  .tab-btn:hover{ color:var(--ink); }
+  .tab-btn.active{
+    background:var(--ink);
+    color:var(--paper);
+  }
+
+  .legend{
+    display:flex;
+    gap:18px;
+    flex-wrap:wrap;
+    justify-content:center;
+    margin-bottom:14px;
+    font-size:12px;
+    color:var(--ink-soft);
+  }
+  .legend span{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+  }
+  .legend .swatch{
+    width:10px;
+    height:10px;
+    border-radius:3px;
+    display:inline-block;
+  }
+  .legend .swatch.neutral{ background:var(--paper); border:1px dashed var(--line); }
+  .legend .swatch.pending{ background:var(--tomato); }
+  .legend .swatch.confirmed{ background:var(--sage); }
+
+  .board{
+    display:grid;
+    grid-template-columns: repeat(10, var(--stub-w));
+    gap:8px;
+    background:var(--paper-dim);
+    padding:16px;
+    border-radius:10px;
+    border:1px solid var(--line);
+    box-shadow: 0 1px 0 #fff inset, 0 6px 18px rgba(43,42,37,0.06);
+  }
+
+  .stub{
+    position:relative;
+    aspect-ratio: 1;
+    width: var(--stub-w);
+    border-radius:6px;
+    border:1px dashed var(--line);
+    background:var(--paper);
+    color:var(--ink-soft);
+    font-family:'Courier Prime', monospace;
+    font-weight:700;
+    font-size:13px;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    transition: transform .12s ease, box-shadow .12s ease, background .15s ease, border-color .15s ease, color .15s ease;
+  }
+  .stub:hover{
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(43,42,37,0.12);
+    border-color: var(--mustard);
+    color:var(--ink);
+  }
+  .stub:focus-visible{
+    outline: 2px solid var(--mustard);
+    outline-offset: 2px;
+  }
+  .stub.pending{
+    background: var(--tomato);
+    border-style:solid;
+    border-color: var(--tomato);
+    color:#fff;
+  }
+  .stub.pending:hover{ box-shadow: 0 4px 10px rgba(193,68,14,0.35); }
+  .stub.confirmed{
+    background: var(--sage);
+    border-style:solid;
+    border-color: var(--sage);
+    color:#fff;
+  }
+  .stub.confirmed:hover{ box-shadow: 0 4px 10px rgba(92,122,82,0.35); }
+  .stub.kitchen-empty{ cursor:default; }
+  .stub.kitchen-empty:hover{
+    transform:none; box-shadow:none; border-color:var(--line); color:var(--ink-soft);
+  }
+
+  .status-line{
+    font-family:'Courier Prime', monospace;
+    font-size:11px;
+    color:var(--ink-soft);
+    text-align:center;
+    margin-top:10px;
+    min-height:14px;
+  }
+
+  .overlay{
+    position:fixed;
+    inset:0;
+    background:rgba(43,42,37,0.45);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+    z-index:50;
+  }
+  .overlay.open{ display:flex; }
+
+  .ticket{
+    background:var(--paper);
+    width:100%;
+    max-width:420px;
+    max-height:88vh;
+    overflow-y:auto;
+    border-radius:10px;
+    box-shadow: 0 20px 50px rgba(43,42,37,0.35);
+    padding:24px 22px 22px;
+    position:relative;
+    border:1px solid var(--line);
+  }
+  .ticket::before{
+    content:"";
+    position:absolute;
+    top:-8px; left:24px; right:24px;
+    height:16px;
+    background:
+      radial-gradient(circle, transparent 9px, var(--paper) 10px) 0 0 / 20px 20px repeat-x;
+  }
+
+  .ticket-head{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    border-bottom:2px dashed var(--line);
+    padding-bottom:14px;
+    margin-bottom:16px;
+  }
+  .ticket-head .eyebrow{
+    font-family:'Courier Prime', monospace;
+    font-size:11px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+  }
+  .ticket-head h2{
+    margin:2px 0 0;
+    font-family:'Courier Prime', monospace;
+    font-size:22px;
+  }
+  .close-x{
+    background:none;
+    border:none;
+    font-size:20px;
+    color:var(--ink-soft);
+    cursor:pointer;
+    line-height:1;
+    padding:4px;
+  }
+  .close-x:hover{ color:var(--tomato); }
+
+  .section-label{
+    font-family:'Courier Prime', monospace;
+    font-size:11px;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    margin: 6px 0 4px;
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  .section-label.locked::before{ content:"🔒"; font-size:10px; }
+
+  .locked-block{
+    background:var(--paper-dim);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:10px 12px;
+    margin-bottom:14px;
+  }
+  .locked-line{
+    display:flex;
+    justify-content:space-between;
+    font-size:13px;
+    padding:4px 0;
+    color:var(--ink-soft);
+  }
+  .locked-line span:first-child{ color:var(--ink); }
+  .locked-note{
+    font-size:12px;
+    color:var(--ink-soft);
+    padding:2px 0;
+  }
+
+  .meal-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:12px 0;
+    border-bottom:1px solid var(--line);
+    gap:14px;
+  }
+  .meal-row:last-of-type{ border-bottom:none; }
+  .meal-name{
+    font-weight:600;
+    font-size:15px;
+  }
+  .stepper{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    flex-shrink:0;
+  }
+  .step-btn{
+    width:30px;
+    height:30px;
+    border-radius:50%;
+    border:1px solid var(--line);
+    background:var(--paper-dim);
+    font-size:16px;
+    font-weight:700;
+    color:var(--ink);
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    transition: background .15s ease, border-color .15s ease;
+  }
+  .step-btn:hover{ background:#fff; border-color:var(--mustard); }
+  .step-btn:active{ transform: scale(.94); }
+  .step-btn.minus{ color:var(--tomato); }
+  .step-btn.plus{ color:var(--sage); }
+  .qty{
+    font-family:'Courier Prime', monospace;
+    font-weight:700;
+    font-size:16px;
+    width:20px;
+    text-align:center;
+  }
+
+  .custom-row{ align-items:flex-start; }
+  .custom-input{
+    margin-top:6px;
+    width:100%;
+    max-width:170px;
+    padding:8px 10px;
+    border-radius:6px;
+    border:1px solid var(--line);
+    background:var(--paper);
+    font-family:'Inter', sans-serif;
+    font-size:13px;
+    color:var(--ink);
+  }
+  .custom-input:focus{ outline:none; border-color:var(--mustard); }
+  .custom-input::placeholder{ color:var(--ink-soft); }
+
+  .ticket-foot{
+    margin-top:18px;
+    display:flex;
+    gap:10px;
+  }
+  .btn{
+    flex:1;
+    padding:12px 14px;
+    border-radius:7px;
+    border:none;
+    font-family:'Inter', sans-serif;
+    font-weight:600;
+    font-size:14px;
+    cursor:pointer;
+    transition: filter .15s ease, transform .1s ease;
+  }
+  .btn:active{ transform: scale(.98); }
+  .btn.primary{ background:var(--sage); color:#fff; }
+  .btn.primary:disabled{ background:var(--line); color:var(--ink-soft); cursor:not-allowed; }
+  .btn.primary:not(:disabled):hover{ filter:brightness(1.08); }
+  .btn.ghost{ background:transparent; color:var(--ink-soft); border:1px solid var(--line); }
+  .btn.ghost:hover{ border-color:var(--tomato); color:var(--tomato); }
+  .btn.danger{ background:transparent; color:var(--tomato); border:1px solid var(--tomato); }
+  .btn.danger:hover{ background:var(--tomato); color:#fff; }
+
+  .stamp{
+    position:absolute;
+    top:18px;
+    right:22px;
+    font-family:'Courier Prime', monospace;
+    font-size:11px;
+    letter-spacing:.12em;
+    padding:3px 8px;
+    border-radius:4px;
+    transform: rotate(6deg);
+    text-transform:uppercase;
+  }
+  .stamp.pending{ color:var(--tomato); border:2px solid var(--tomato); }
+  .stamp.confirmed{ color:var(--sage); border:2px solid var(--sage); }
+
+  .summary-list{ margin: 4px 0 0; padding:0; list-style:none; }
+  .summary-list li{
+    display:flex;
+    justify-content:space-between;
+    padding:10px 0;
+    border-bottom:1px dashed var(--line);
+    font-size:14px;
+  }
+  .summary-list li:last-child{ border-bottom:none; }
+  .summary-list .qty-tag{ font-family:'Courier Prime', monospace; color:var(--ink-soft); }
+  .empty-note{ color:var(--ink-soft); font-size:13px; padding:14px 0; }
+
+  @media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
+
+  /* ---- stock panel ---- */
+  .stock-panel{
+    width:100%;
+    max-width:520px;
+    margin-top:26px;
+    background:var(--paper-dim);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:18px 20px;
+  }
+  .stock-panel h3{
+    font-family:'Courier Prime', monospace;
+    font-size:14px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    margin:0 0 12px;
+    color:var(--ink-soft);
+  }
+  .stock-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    padding:10px 0;
+    border-bottom:1px solid var(--line);
+    flex-wrap:wrap;
+  }
+  .stock-row:last-child{ border-bottom:none; }
+  .stock-name{
+    font-weight:600;
+    font-size:14px;
+    flex:1 1 120px;
+  }
+  .stock-controls{
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .stock-select{
+    font-family:'Inter', sans-serif;
+    font-size:13px;
+    padding:7px 8px;
+    border-radius:6px;
+    border:1px solid var(--line);
+    background:var(--paper);
+    color:var(--ink);
+  }
+  .stock-set-btn{
+    font-family:'Inter', sans-serif;
+    font-size:12px;
+    font-weight:600;
+    padding:7px 12px;
+    border-radius:6px;
+    border:1px solid var(--line);
+    background:var(--paper);
+    color:var(--ink-soft);
+    cursor:pointer;
+    transition: border-color .15s ease, color .15s ease;
+  }
+  .stock-set-btn:hover{ border-color:var(--mustard); color:var(--ink); }
+  .stock-count{
+    font-family:'Courier Prime', monospace;
+    font-weight:700;
+    font-size:14px;
+    min-width:96px;
+    text-align:right;
+  }
+  .stock-count.low{ color:var(--tomato); }
+  .stock-count.ok{ color:var(--sage); }
+
+  .generate-btn{
+    margin-top:22px;
+    font-family:'Courier Prime', monospace;
+    font-size:13px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    padding:13px 26px;
+    border-radius:8px;
+    border:none;
+    background:var(--ink);
+    color:var(--paper);
+    cursor:pointer;
+    transition: filter .15s ease, transform .1s ease;
+  }
+  .generate-btn:hover{ filter:brightness(1.15); }
+  .generate-btn:active{ transform: scale(.98); }
+
+  .report-block{
+    padding:12px 0;
+    border-bottom:1px dashed var(--line);
+  }
+  .report-block:last-child{ border-bottom:none; }
+  .report-block .r-name{
+    font-family:'Courier Prime', monospace;
+    font-weight:700;
+    font-size:14px;
+    margin-bottom:4px;
+  }
+  .report-block .r-line{
+    display:flex;
+    justify-content:space-between;
+    font-size:13px;
+    padding:2px 0;
+    color:var(--ink);
+  }
+  .report-block .r-line span:last-child{
+    font-family:'Courier Prime', monospace;
+    color:var(--ink-soft);
+  }
+  .report-totals{
+    margin-top:6px;
+    padding-top:14px;
+    border-top:2px dashed var(--line);
+  }
+  .report-totals .r-name{ color:var(--tomato); }
+
+  /* ---- menu editor ---- */
+  .menu-edit-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:8px 0;
+    border-bottom:1px solid var(--line);
+  }
+  .menu-edit-row:last-of-type{ border-bottom:none; }
+  .menu-edit-row .drag-num{
+    font-family:'Courier Prime', monospace;
+    font-size:12px;
+    color:var(--ink-soft);
+    width:18px;
+    flex-shrink:0;
+  }
+  .menu-input{
+    flex:1;
+    min-width:0;
+    padding:9px 10px;
+    border-radius:6px;
+    border:1px solid var(--line);
+    background:var(--paper);
+    font-family:'Inter', sans-serif;
+    font-size:14px;
+    color:var(--ink);
+  }
+  .menu-input:focus{ outline:none; border-color:var(--mustard); }
+  .menu-input.invalid{ border-color:var(--tomato); }
+  .menu-del-btn{
+    flex-shrink:0;
+    width:30px;
+    height:30px;
+    border-radius:6px;
+    border:1px solid var(--line);
+    background:var(--paper-dim);
+    color:var(--tomato);
+    font-size:15px;
+    line-height:1;
+    cursor:pointer;
+    transition: background .15s ease, border-color .15s ease;
+  }
+  .menu-del-btn:hover{ background:var(--tomato); color:#fff; border-color:var(--tomato); }
+  .menu-del-btn:disabled{ opacity:.35; cursor:not-allowed; }
+  .menu-del-btn:disabled:hover{ background:var(--paper-dim); color:var(--tomato); border-color:var(--line); }
+  .menu-add-btn{
+    margin-top:12px;
+    width:100%;
+    padding:10px;
+    border-radius:7px;
+    border:1px dashed var(--line);
+    background:transparent;
+    font-family:'Inter', sans-serif;
+    font-size:13px;
+    font-weight:600;
+    color:var(--ink-soft);
+    cursor:pointer;
+    transition: border-color .15s ease, color .15s ease;
+  }
+  .menu-add-btn:hover{ border-color:var(--sage); color:var(--sage); }
+  .menu-note{
+    font-size:12px;
+    color:var(--ink-soft);
+    line-height:1.5;
+    margin-top:14px;
+    padding-top:12px;
+    border-top:1px dashed var(--line);
+  }
+  .menu-warn{
+    font-size:12px;
+    color:var(--tomato);
+    margin-top:10px;
+    min-height:15px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">Order Board</div>
+  <h1 id="pageTitle">Bands In Parks</h1>
+  <p id="pageSub">Tap a table, build the order, confirm the ticket.</p>
+</header>
+
+<div class="tabs">
+  <button class="tab-btn active" id="orderTabBtn">Order view</button>
+  <button class="tab-btn" id="kitchenTabBtn">Kitchen view</button>
+</div>
+
+<div class="legend">
+  <span><span class="swatch neutral"></span>No order</span>
+  <span><span class="swatch pending"></span>Waiting on kitchen</span>
+  <span><span class="swatch confirmed"></span>All caught up</span>
+</div>
+
+<div class="board" id="board" role="grid" aria-label="Table grid"></div>
+<div class="status-line" id="statusLine"></div>
+
+<section class="stock-panel" id="stockPanel">
+  <h3>Meal stock</h3>
+  <div id="stockRows"></div>
+</section>
+
+<div style="display:flex; gap:12px; flex-wrap:wrap; justify-content:center;">
+  <button class="generate-btn" id="generateSummaryBtn">Generate summary</button>
+  <button class="generate-btn" id="editMenuBtn" style="background:var(--mustard);">Edit menu</button>
+  <button class="generate-btn" id="resetBtn" style="background:var(--tomato);">Reset</button>
+</div>
+
+<!-- Order picker overlay (order-taker) -->
+<div class="overlay" id="pickerOverlay">
+  <div class="ticket" role="dialog" aria-modal="true" aria-labelledby="pickerTitle">
+    <button class="close-x" id="pickerClose" aria-label="Close">✕</button>
+    <div class="ticket-head">
+      <div>
+        <div class="eyebrow">Table</div>
+        <h2 id="pickerTitle">—</h2>
+      </div>
+    </div>
+
+    <div id="pickerHistory"></div>
+
+    <div id="pickerNewLabel" class="section-label" style="display:none;">New order</div>
+    <div id="mealRows"></div>
+
+    <div class="ticket-foot">
+      <button class="btn ghost" id="cancelBtn">Cancel</button>
+      <button class="btn primary" id="confirmBtn" disabled>Confirm order</button>
+    </div>
+  </div>
+</div>
+
+<!-- Order-taker's post-confirm ticket -->
+<div class="overlay" id="summaryOverlay">
+  <div class="ticket" role="dialog" aria-modal="true" aria-labelledby="summaryTitle">
+    <span class="stamp pending">Sent</span>
+    <button class="close-x" id="summaryClose" aria-label="Close">✕</button>
+    <div class="ticket-head">
+      <div>
+        <div class="eyebrow">Table</div>
+        <h2 id="summaryTitle">—</h2>
+      </div>
+    </div>
+
+    <ul class="summary-list" id="summaryList"></ul>
+
+    <div class="ticket-foot">
+      <button class="btn danger" id="editBtn">Edit order</button>
+      <button class="btn primary" id="doneBtn">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Kitchen detail overlay -->
+<div class="overlay" id="kitchenDetailOverlay">
+  <div class="ticket" role="dialog" aria-modal="true" aria-labelledby="kitchenDetailTitle">
+    <span class="stamp" id="kitchenStamp">Pending</span>
+    <button class="close-x" id="kitchenDetailClose" aria-label="Close">✕</button>
+    <div class="ticket-head">
+      <div>
+        <div class="eyebrow">Table</div>
+        <h2 id="kitchenDetailTitle">—</h2>
+      </div>
+    </div>
+
+    <div id="kitchenPendingSection">
+      <div class="section-label">To prepare</div>
+      <ul class="summary-list" id="kitchenPendingList"></ul>
+    </div>
+
+    <div id="kitchenCompletedSection" style="display:none;">
+      <div class="section-label locked">Already served</div>
+      <div class="locked-block" id="kitchenCompletedList"></div>
+    </div>
+
+    <div class="ticket-foot">
+      <button class="btn ghost" id="kitchenDetailCloseBtn">Close</button>
+      <button class="btn primary" id="kitchenActionBtn">Order confirmed</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reset confirmation overlay -->
+<div class="overlay" id="resetOverlay">
+  <div class="ticket" role="dialog" aria-modal="true" aria-labelledby="resetTitle" style="max-width:380px;">
+    <div class="ticket-head">
+      <div>
+        <div class="eyebrow">Reset board</div>
+        <h2 id="resetTitle">Are you sure?</h2>
+      </div>
+    </div>
+    <p style="font-size:14px; color:var(--ink-soft); margin:0 0 4px;">
+      This will delete all orders and stock levels for today. Every table will go back to empty and this cannot be undone.
+    </p>
+    <div class="ticket-foot">
+      <button class="btn ghost" id="resetCancelBtn">Cancel</button>
+      <button class="btn danger" id="resetConfirmBtn" style="background:var(--tomato); color:#fff; border-color:var(--tomato);">Yes, reset everything</button>
+    </div>
+  </div>
+</div>
+
+<!-- Order summary report: every table + grand totals -->
+<div class="overlay" id="reportOverlay">
+  <div class="ticket" role="dialog" aria-modal="true" aria-labelledby="reportTitle" style="max-width:460px;">
+    <button class="close-x" id="reportClose" aria-label="Close">✕</button>
+    <div class="ticket-head">
+      <div>
+        <div class="eyebrow">Full order summary</div>
+        <h2 id="reportTitle">All tables</h2>
+      </div>
+    </div>
+
+    <div id="reportTables"></div>
+
+    <div class="report-totals" id="reportTotalsWrap">
+      <div class="r-name">Totals — all tables combined</div>
+      <div id="reportTotals"></div>
+    </div>
+
+    <div class="ticket-foot">
+      <button class="btn ghost" id="reportCloseBtn">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Menu editor overlay -->
+<div class="overlay" id="menuOverlay">
+  <div class="ticket" role="dialog" aria-modal="true" aria-labelledby="menuEditTitle">
+    <button class="close-x" id="menuClose" aria-label="Close">✕</button>
+    <div class="ticket-head">
+      <div>
+        <div class="eyebrow">Setup</div>
+        <h2 id="menuEditTitle">Edit menu</h2>
+      </div>
+    </div>
+
+    <div class="section-label">Items on the menu</div>
+    <div id="menuEditRows"></div>
+    <button class="menu-add-btn" id="menuAddBtn">+ Add another item</button>
+
+    <div class="menu-warn" id="menuWarn"></div>
+
+    <div class="menu-note">
+      Renaming an item updates it everywhere, including orders already taken.
+      Removing an item keeps it on existing tickets (marked “off menu”) but it
+      can no longer be ordered. Changes are shared with everyone on this link.
+    </div>
+
+    <div class="ticket-foot">
+      <button class="btn ghost" id="menuCancelBtn">Cancel</button>
+      <button class="btn primary" id="menuSaveBtn">Save menu</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ---------- Shared storage via Netlify Blobs ----------
+  // Polyfills window.storage so the rest of the app (written against
+  // Claude's artifact storage API) works unchanged once hosted on Netlify.
+  // Backed by /netlify/functions/storage.js, which reads/writes a Netlify
+  // Blobs store so every visitor sees the same live data.
+  (function(){
+    const ENDPOINT = '/.netlify/functions/storage';
+
+    async function call(payload){
+      const res = await fetch(ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if(!res.ok){
+        const text = await res.text().catch(()=> '');
+        throw new Error('Storage request failed (' + res.status + '): ' + text);
+      }
+      return res.json();
+    }
+
+    window.storage = {
+      async get(key, shared){
+        const result = await call({ op:'get', key, shared: !!shared });
+        return result; // { key, value, shared } | null
+      },
+      async set(key, value, shared){
+        return call({ op:'set', key, value, shared: !!shared });
+      },
+      async delete(key, shared){
+        return call({ op:'delete', key, shared: !!shared });
+      },
+      async list(prefix, shared){
+        return call({ op:'list', prefix: prefix || '', shared: !!shared });
+      }
+    };
+  })();
+
+  const DEFAULT_MEALS = [
+    { id:'m1', name:'Steak Pie' },
+    { id:'m2', name:'Cake Platter' },
+    { id:'m3', name:'Cheese Platter' },
+    { id:'m4', name:'Pudding' },
+  ];
+  // Menu is editable at runtime and shared with everyone on the link.
+  let MEALS = DEFAULT_MEALS.map(m=> ({ ...m }));
+  const CUSTOM_COUNT = 3;
+
+  function newMealId(){
+    return 'm' + Date.now().toString(36) + Math.floor(Math.random()*1000).toString(36);
+  }
+
+  function emptyItems(){
+    const customs = [];
+    for(let i=0;i<CUSTOM_COUNT;i++) customs.push({ qty:0, name:'' });
+    const items = { customs };
+    MEALS.forEach(m=>{ items[m.id] = 0; });
+    return items;
+  }
+
+  function itemsTotal(items){
+    if(!items) return 0;
+    let total = 0;
+    Object.keys(items).forEach(key=>{
+      if(key !== 'customs' && typeof items[key] === 'number') total += items[key];
+    });
+    if(items.customs) total += items.customs.reduce((s,c)=> s + (c.qty||0), 0);
+    return total;
+  }
+
+  // Remembers names of items removed from the menu, so tickets already
+  // placed against them still read correctly instead of vanishing.
+  const mealNameCache = {};
+  function cacheMealNames(){ MEALS.forEach(m=> mealNameCache[m.id] = m.name); }
+  cacheMealNames();
+
+  function itemRows(items){
+    const rows = [];
+    MEALS.forEach(m=>{
+      if(items[m.id] > 0) rows.push({ name: m.name, qty: items[m.id] });
+    });
+    // Any quantity recorded against an item that has since been taken off the menu
+    const liveIds = new Set(MEALS.map(m=> m.id));
+    Object.keys(items).forEach(key=>{
+      if(key === 'customs' || liveIds.has(key)) return;
+      if(typeof items[key] === 'number' && items[key] > 0){
+        rows.push({ name: (mealNameCache[key] || 'Removed item') + ' (off menu)', qty: items[key] });
+      }
+    });
+    if(items.customs){
+      items.customs.forEach(c=>{
+        if(c.qty > 0) rows.push({ name: c.name || 'Custom item', qty: c.qty });
+      });
+    }
+    return rows;
+  }
+
+  // Merge item rows from several confirmed tickets into one summed list
+  function aggregateRows(ticketList){
+    const map = new Map();
+    ticketList.forEach(t=>{
+      itemRows(t).forEach(r=>{
+        map.set(r.name, (map.get(r.name)||0) + r.qty);
+      });
+    });
+    return Array.from(map.entries()).map(([name,qty])=>({name,qty}));
+  }
+
+  // orders[tableNumber] = array of tickets: { id, m1,m2,m3,m4, customs, status:'pending'|'confirmed', createdAt }
+  const orders = {};
+  let activeSeat = null;
+  let editingTicketId = null; // id of the pending ticket being edited, or null for a brand-new one
+  let draft = emptyItems();
+  let mode = 'order';
+
+  const board = document.getElementById('board');
+  const pickerOverlay = document.getElementById('pickerOverlay');
+  const summaryOverlay = document.getElementById('summaryOverlay');
+  const kitchenDetailOverlay = document.getElementById('kitchenDetailOverlay');
+  const mealRows = document.getElementById('mealRows');
+  const pickerTitle = document.getElementById('pickerTitle');
+  const pickerHistory = document.getElementById('pickerHistory');
+  const pickerNewLabel = document.getElementById('pickerNewLabel');
+  const summaryTitle = document.getElementById('summaryTitle');
+  const summaryList = document.getElementById('summaryList');
+  const confirmBtn = document.getElementById('confirmBtn');
+  const statusLine = document.getElementById('statusLine');
+  const pageTitle = document.getElementById('pageTitle');
+  const pageSub = document.getElementById('pageSub');
+  const orderTabBtn = document.getElementById('orderTabBtn');
+  const kitchenTabBtn = document.getElementById('kitchenTabBtn');
+  const kitchenDetailTitle = document.getElementById('kitchenDetailTitle');
+  const kitchenPendingList = document.getElementById('kitchenPendingList');
+  const kitchenPendingSection = document.getElementById('kitchenPendingSection');
+  const kitchenCompletedSection = document.getElementById('kitchenCompletedSection');
+  const kitchenCompletedList = document.getElementById('kitchenCompletedList');
+  const kitchenActionBtn = document.getElementById('kitchenActionBtn');
+  const kitchenStamp = document.getElementById('kitchenStamp');
+  const stockRows = document.getElementById('stockRows');
+  const reportOverlay = document.getElementById('reportOverlay');
+  const reportTables = document.getElementById('reportTables');
+  const reportTotals = document.getElementById('reportTotals');
+
+  function setStatus(msg){ statusLine.textContent = msg || ''; }
+
+  function getTickets(seat){ return orders[seat] || []; }
+  function getPendingTicket(seat){ return getTickets(seat).find(t=> t.status === 'pending'); }
+  function getConfirmedTickets(seat){ return getTickets(seat).filter(t=> t.status === 'confirmed'); }
+
+  // ---------- Meal stock ----------
+  const STOCK_MAX = 200;
+  const STOCK_OPTIONS = Array.from({ length: STOCK_MAX + 1 }, (_, n)=> n);
+  const stockTotals = {};
+  MEALS.forEach(m=>{ stockTotals[m.id] = 0; });
+  let stockPanelInteracting = false; // true while a stock dropdown is focused, to pause auto-refresh
+
+  function orderedQtyFor(mealId){
+    let total = 0;
+    Object.keys(orders).forEach(seat=>{
+      getTickets(seat).forEach(t=>{ total += (t[mealId]||0); });
+    });
+    return total;
+  }
+
+  function renderStockPanel(){
+    stockRows.innerHTML = '';
+    MEALS.forEach(meal=>{
+      const total = stockTotals[meal.id] || 0;
+      const ordered = orderedQtyFor(meal.id);
+      const remaining = total - ordered;
+
+      const row = document.createElement('div');
+      row.className = 'stock-row';
+
+      const optionsHtml = STOCK_OPTIONS.map(n=>
+        `<option value="${n}" ${n===total ? 'selected':''}>${n}</option>`
+      ).join('');
+
+      row.innerHTML = `
+        <div class="stock-name">${meal.name}</div>
+        <div class="stock-controls">
+          <select class="stock-select" id="stockSelect-${meal.id}" aria-label="Set starting stock for ${meal.name}">
+            ${optionsHtml}
+          </select>
+          <button class="stock-set-btn" data-meal="${meal.id}">Set stock</button>
+        </div>
+        <div class="stock-count ${remaining<=0 && total>0 ? 'low':'ok'}" id="stockCount-${meal.id}">
+          Remaining: ${remaining} / ${total}
+        </div>
+      `;
+      stockRows.appendChild(row);
+    });
+
+    stockRows.querySelectorAll('.stock-set-btn').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const mealId = btn.dataset.meal;
+        const select = document.getElementById('stockSelect-'+mealId);
+        stockTotals[mealId] = Math.max(0, Math.min(STOCK_MAX, parseInt(select.value, 10) || 0));
+        stockPanelInteracting = false;
+        renderStockPanel();
+        await saveStock();
+      });
+    });
+
+    stockRows.querySelectorAll('.stock-select').forEach(sel=>{
+      sel.addEventListener('focus', ()=> stockPanelInteracting = true);
+      sel.addEventListener('blur', ()=> stockPanelInteracting = false);
+      // some mobile browsers fire change without a lingering focus/blur pair,
+      // so treat any in-progress change as interaction too
+      sel.addEventListener('change', ()=> stockPanelInteracting = true);
+    });
+  }
+
+  async function saveStock(){
+    if(!storageAvailable){
+      setStatus('Storage not available — stock levels only saved on this device.');
+      return;
+    }
+    try{
+      await window.storage.set('mealStock', JSON.stringify(stockTotals), true);
+      setStatus('Stock levels saved — visible to everyone with this link.');
+    }catch(err){
+      console.error('Stock save failed', err);
+      setStatus('Could not save stock levels.');
+    }
+  }
+
+  async function loadStock(){
+    if(!storageAvailable) return;
+    try{
+      const res = await window.storage.get('mealStock', true);
+      if(res && res.value){
+        const parsed = JSON.parse(res.value);
+        MEALS.forEach(m=>{ stockTotals[m.id] = parsed[m.id] || 0; });
+      }
+    }catch(err){
+      // key may not exist yet — that's fine, stock stays at 0
+    }
+  }
+
+  // ---------- Full summary report ----------
+  function renderReport(){
+    reportTables.innerHTML = '';
+    const seatNumbers = Object.keys(orders)
+      .map(n=>parseInt(n,10))
+      .filter(seat=> getTickets(seat).length > 0)
+      .sort((a,b)=>a-b);
+
+    if(seatNumbers.length === 0){
+      const p = document.createElement('div');
+      p.className = 'empty-note';
+      p.textContent = 'No tables have ordered yet.';
+      reportTables.appendChild(p);
+    } else {
+      seatNumbers.forEach(seat=>{
+        const rows = aggregateRows(getTickets(seat));
+        const block = document.createElement('div');
+        block.className = 'report-block';
+        const nameEl = document.createElement('div');
+        nameEl.className = 'r-name';
+        nameEl.textContent = 'Table ' + seat + ':';
+        block.appendChild(nameEl);
+        rows.forEach(r=>{
+          const line = document.createElement('div');
+          line.className = 'r-line';
+          line.innerHTML = `<span>${r.name}</span><span>${r.qty}</span>`;
+          block.appendChild(line);
+        });
+        reportTables.appendChild(block);
+      });
+    }
+
+    const allTickets = [];
+    Object.keys(orders).forEach(seat=> allTickets.push(...getTickets(seat)));
+    const totals = aggregateRows(allTickets);
+    reportTotals.innerHTML = '';
+    if(totals.length === 0){
+      const p = document.createElement('div');
+      p.className = 'empty-note';
+      p.textContent = 'Nothing ordered yet.';
+      reportTotals.appendChild(p);
+    } else {
+      totals.forEach(r=>{
+        const line = document.createElement('div');
+        line.className = 'r-line';
+        line.innerHTML = `<span>${r.name}</span><span>${r.qty}</span>`;
+        reportTotals.appendChild(line);
+      });
+    }
+  }
+
+  document.getElementById('generateSummaryBtn').addEventListener('click', async ()=>{
+    await loadAllOrders();
+    await loadStock();
+    renderReport();
+    renderStockPanel();
+    refreshBoardColors();
+    reportOverlay.classList.add('open');
+  });
+  document.getElementById('editMenuBtn').addEventListener('click', async ()=>{
+    await loadMenu();
+    openMenuEditor();
+  });
+  document.getElementById('reportClose').addEventListener('click', ()=> reportOverlay.classList.remove('open'));
+  document.getElementById('reportCloseBtn').addEventListener('click', ()=> reportOverlay.classList.remove('open'));
+  reportOverlay.addEventListener('click', (e)=>{ if(e.target === reportOverlay) reportOverlay.classList.remove('open'); });
+
+  function tableStatusClass(seat){
+    if(getPendingTicket(seat)) return 'pending';
+    if(getConfirmedTickets(seat).length > 0) return 'confirmed';
+    return '';
+  }
+
+  // ---------- Board rendering ----------
+  function renderBoard(){
+    board.innerHTML = '';
+    for(let i=1;i<=100;i++){
+      const statusClass = tableStatusClass(i);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = i;
+      btn.id = 'seat-'+i;
+      btn.className = 'stub' + (statusClass ? ' '+statusClass : '');
+
+      if(mode === 'order'){
+        btn.setAttribute('aria-label','Table '+i+(statusClass ? ', '+statusClass : ', no order'));
+        btn.addEventListener('click', ()=> openPicker(i));
+      } else {
+        if(statusClass){
+          btn.setAttribute('aria-label','Table '+i+', '+statusClass+', view order');
+          btn.addEventListener('click', ()=> openKitchenDetail(i));
+        } else {
+          btn.classList.add('kitchen-empty');
+          btn.setAttribute('aria-label','Table '+i+', no order');
+          btn.addEventListener('click', ()=> setStatus('Table '+i+' has no order yet.'));
+        }
+      }
+      board.appendChild(btn);
+    }
+  }
+  function refreshBoardColors(){ renderBoard(); }
+
+  // ---------- Mode switching ----------
+  function setMode(newMode){
+    mode = newMode;
+    if(mode === 'order'){
+      orderTabBtn.classList.add('active');
+      kitchenTabBtn.classList.remove('active');
+      pageTitle.textContent = 'Bands In Parks';
+      pageSub.textContent = 'Tap a table, build the order, confirm the ticket.';
+    } else {
+      orderTabBtn.classList.remove('active');
+      kitchenTabBtn.classList.add('active');
+      pageTitle.textContent = 'Kitchen Board';
+      pageSub.textContent = 'Red tables have new items waiting. Tap one to view and confirm.';
+    }
+    renderBoard();
+  }
+  orderTabBtn.addEventListener('click', ()=> setMode('order'));
+  kitchenTabBtn.addEventListener('click', ()=> setMode('kitchen'));
+
+  // ---------- Order-taker picker ----------
+  function openPicker(seat){
+    activeSeat = seat;
+    const pending = getPendingTicket(seat);
+    const confirmed = getConfirmedTickets(seat);
+
+    if(pending){
+      editingTicketId = pending.id;
+      draft = emptyItems();
+      MEALS.forEach(m=>{ draft[m.id] = pending[m.id] || 0; });
+      draft.customs = JSON.parse(JSON.stringify(pending.customs || []));
+      while(draft.customs.length < CUSTOM_COUNT) draft.customs.push({ qty:0, name:'' });
+    } else {
+      editingTicketId = null;
+      draft = emptyItems();
+    }
+
+    pickerTitle.textContent = 'No. ' + seat;
+
+    // Locked history of already-served items for this table
+    pickerHistory.innerHTML = '';
+    if(confirmed.length > 0){
+      const label = document.createElement('div');
+      label.className = 'section-label locked';
+      label.textContent = 'Already served';
+      pickerHistory.appendChild(label);
+      const block = document.createElement('div');
+      block.className = 'locked-block';
+      aggregateRows(confirmed).forEach(r=>{
+        const line = document.createElement('div');
+        line.className = 'locked-line';
+        line.innerHTML = `<span>${r.name}</span><span>× ${r.qty}</span>`;
+        block.appendChild(line);
+      });
+      pickerHistory.appendChild(block);
+      pickerNewLabel.style.display = pending ? 'none' : 'block';
+      pickerNewLabel.textContent = pending ? '' : 'Add another order';
+    } else {
+      pickerNewLabel.style.display = 'none';
+    }
+
+    renderMealRows();
+    pickerOverlay.classList.add('open');
+  }
+
+  function renderMealRows(){
+    mealRows.innerHTML = '';
+    MEALS.forEach(meal=>{
+      const row = document.createElement('div');
+      row.className = 'meal-row';
+      row.innerHTML = `
+        <div class="meal-name">${meal.name}</div>
+        <div class="stepper">
+          <button class="step-btn minus" data-kind="meal" data-id="${meal.id}" data-dir="-1" aria-label="Remove one ${meal.name}">−</button>
+          <span class="qty" id="qty-${meal.id}">${draft[meal.id] || 0}</span>
+          <button class="step-btn plus" data-kind="meal" data-id="${meal.id}" data-dir="1" aria-label="Add one ${meal.name}">+</button>
+        </div>
+      `;
+      mealRows.appendChild(row);
+    });
+
+    for(let i=0;i<CUSTOM_COUNT;i++){
+      const row = document.createElement('div');
+      row.className = 'meal-row custom-row';
+      const c = draft.customs[i];
+      row.innerHTML = `
+        <div style="width:100%;">
+          <div class="meal-name">Custom item ${i+1}</div>
+          <input type="text" id="customName-${i}" class="custom-input" placeholder="Type item name…"
+                 value="${c.name.replace(/"/g,'&quot;')}" maxlength="60" />
+        </div>
+        <div class="stepper">
+          <button class="step-btn minus" data-kind="custom" data-id="${i}" data-dir="-1" aria-label="Remove one custom item ${i+1}">−</button>
+          <span class="qty" id="qty-custom-${i}">${c.qty}</span>
+          <button class="step-btn plus" data-kind="custom" data-id="${i}" data-dir="1" aria-label="Add one custom item ${i+1}">+</button>
+        </div>
+      `;
+      mealRows.appendChild(row);
+    }
+
+    mealRows.querySelectorAll('.custom-input').forEach((input, idx)=>{
+      input.addEventListener('input', (e)=>{
+        draft.customs[idx].name = e.target.value;
+        updateConfirmState();
+      });
+    });
+
+    mealRows.querySelectorAll('.step-btn').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        const kind = b.dataset.kind;
+        const dir = parseInt(b.dataset.dir,10);
+        if(kind === 'meal'){
+          const id = b.dataset.id;
+          draft[id] = Math.max(0, Math.min(99, (draft[id] || 0) + dir));
+          document.getElementById('qty-'+id).textContent = draft[id];
+        } else {
+          const idx = parseInt(b.dataset.id,10);
+          draft.customs[idx].qty = Math.max(0, Math.min(99, draft.customs[idx].qty + dir));
+          document.getElementById('qty-custom-'+idx).textContent = draft.customs[idx].qty;
+        }
+        updateConfirmState();
+      });
+    });
+    updateConfirmState();
+  }
+
+  function updateConfirmState(){
+    const total = itemsTotal(draft);
+    const customNeedsName = draft.customs.some(c=> c.qty > 0 && c.name.trim() === '');
+    confirmBtn.disabled = total === 0 || customNeedsName;
+  }
+
+  function closePicker(){
+    pickerOverlay.classList.remove('open');
+    activeSeat = null;
+  }
+
+  document.getElementById('pickerClose').addEventListener('click', closePicker);
+  document.getElementById('cancelBtn').addEventListener('click', closePicker);
+
+  document.getElementById('confirmBtn').addEventListener('click', async ()=>{
+    const seat = activeSeat;
+    const items = { customs: JSON.parse(JSON.stringify(draft.customs)) };
+    MEALS.forEach(m=>{ items[m.id] = draft[m.id] || 0; });
+    items.customs.forEach(c=> c.name = c.name.trim());
+
+    let list = getTickets(seat).slice();
+    if(editingTicketId){
+      // update the existing pending ticket in place
+      list = list.map(t=> t.id === editingTicketId ? { ...t, ...items } : t);
+    } else {
+      // start a brand-new pending ticket; any confirmed tickets stay untouched
+      list.push({
+        id: 't'+seat+'-'+Date.now()+'-'+Math.floor(Math.random()*1000),
+        ...items,
+        status:'pending',
+        createdAt: Date.now()
+      });
+    }
+    orders[seat] = list;
+    refreshBoardColors();
+    renderStockPanel();
+    closePicker();
+    openSummary(seat);
+    await saveOrder(seat, list);
+  });
+
+  function openSummary(seat){
+    summaryTitle.textContent = 'No. ' + seat;
+    summaryList.innerHTML = '';
+    const pending = getPendingTicket(seat);
+    const rows = pending ? itemRows(pending) : [];
+    if(rows.length === 0){
+      const p = document.createElement('div');
+      p.className = 'empty-note';
+      p.textContent = 'No items on this ticket yet.';
+      summaryList.appendChild(p);
+    } else {
+      rows.forEach(r=>{
+        const li = document.createElement('li');
+        li.innerHTML = `<span>${r.name}</span><span class="qty-tag">× ${r.qty}</span>`;
+        summaryList.appendChild(li);
+      });
+    }
+    summaryOverlay.dataset.seat = seat;
+    summaryOverlay.classList.add('open');
+  }
+
+  document.getElementById('summaryClose').addEventListener('click', ()=> summaryOverlay.classList.remove('open'));
+  document.getElementById('doneBtn').addEventListener('click', ()=> summaryOverlay.classList.remove('open'));
+  document.getElementById('editBtn').addEventListener('click', ()=>{
+    const seat = parseInt(summaryOverlay.dataset.seat,10);
+    summaryOverlay.classList.remove('open');
+    openPicker(seat);
+  });
+
+  // ---------- Kitchen detail popup ----------
+  function openKitchenDetail(seat){
+    const pending = getPendingTicket(seat);
+    const confirmed = getConfirmedTickets(seat);
+    if(!pending && confirmed.length === 0) return;
+
+    kitchenDetailOverlay.dataset.seat = seat;
+    kitchenDetailTitle.textContent = 'No. ' + seat;
+
+    kitchenPendingList.innerHTML = '';
+    if(pending){
+      kitchenPendingSection.style.display = 'block';
+      itemRows(pending).forEach(r=>{
+        const li = document.createElement('li');
+        li.innerHTML = `<span>${r.name}</span><span class="qty-tag">× ${r.qty}</span>`;
+        kitchenPendingList.appendChild(li);
+      });
+    } else {
+      kitchenPendingSection.style.display = 'none';
+    }
+
+    kitchenCompletedList.innerHTML = '';
+    if(confirmed.length > 0){
+      kitchenCompletedSection.style.display = 'block';
+      aggregateRows(confirmed).forEach(r=>{
+        const line = document.createElement('div');
+        line.className = 'locked-line';
+        line.innerHTML = `<span>${r.name}</span><span>× ${r.qty}</span>`;
+        kitchenCompletedList.appendChild(line);
+      });
+    } else {
+      kitchenCompletedSection.style.display = 'none';
+    }
+
+    if(pending){
+      kitchenStamp.textContent = 'Pending';
+      kitchenStamp.className = 'stamp pending';
+      kitchenActionBtn.style.display = 'block';
+      kitchenActionBtn.textContent = 'Order confirmed';
+    } else {
+      kitchenStamp.textContent = 'Confirmed';
+      kitchenStamp.className = 'stamp confirmed';
+      kitchenActionBtn.style.display = 'none';
+    }
+
+    kitchenDetailOverlay.classList.add('open');
+  }
+
+  document.getElementById('kitchenDetailClose').addEventListener('click', ()=> kitchenDetailOverlay.classList.remove('open'));
+  document.getElementById('kitchenDetailCloseBtn').addEventListener('click', ()=> kitchenDetailOverlay.classList.remove('open'));
+
+  kitchenActionBtn.addEventListener('click', async ()=>{
+    const seat = parseInt(kitchenDetailOverlay.dataset.seat,10);
+    const list = getTickets(seat).slice();
+    const pending = list.find(t=> t.status === 'pending');
+    if(!pending) return;
+    pending.status = 'confirmed';
+    orders[seat] = list;
+    kitchenDetailOverlay.classList.remove('open');
+    refreshBoardColors();
+    await saveOrder(seat, list);
+  });
+
+  // click outside ticket to close
+  [pickerOverlay, summaryOverlay, kitchenDetailOverlay].forEach(ov=>{
+    ov.addEventListener('click', (e)=>{
+      if(e.target === ov) ov.classList.remove('open');
+    });
+  });
+
+  // ---------- Shared storage sync ----------
+  const storageAvailable = typeof window.storage !== 'undefined';
+
+  async function saveOrder(seat, list){
+    if(!storageAvailable){
+      setStatus('Storage not available — this order is only saved on this device.');
+      return;
+    }
+    try{
+      await window.storage.set('table:'+seat, JSON.stringify(list), true);
+      setStatus('Table ' + seat + ' saved — visible to everyone with this link.');
+    }catch(err){
+      console.error('Save failed', err);
+      setStatus('Could not save Table ' + seat + '. Check your connection and try again.');
+    }
+  }
+
+  async function loadAllOrders(){
+    if(!storageAvailable){
+      setStatus('Storage not available in this environment.');
+      return;
+    }
+    try{
+      const listResult = await window.storage.list('table:', true);
+      const keys = (listResult && listResult.keys) ? listResult.keys : [];
+      for(const key of keys){
+        try{
+          const res = await window.storage.get(key, true);
+          if(res && res.value){
+            const seat = parseInt(key.split(':')[1], 10);
+            let parsed = JSON.parse(res.value);
+            if(!Array.isArray(parsed)){
+              // defensive fallback for any older single-ticket format
+              parsed = parsed ? [{ ...emptyItems(), ...parsed, id:'t'+seat+'-legacy', status: parsed.status || 'pending' }] : [];
+            }
+            orders[seat] = parsed;
+          }
+        }catch(innerErr){
+          console.error('Failed reading', key, innerErr);
+        }
+      }
+      setStatus(keys.length ? ('Synced ' + keys.length + ' table(s).') : 'No tables ordered yet.');
+    }catch(err){
+      console.error('List failed', err);
+      setStatus('Could not load shared orders.');
+    }
+  }
+
+  // ---------- Menu editor ----------
+  const menuOverlay = document.getElementById('menuOverlay');
+  const menuEditRows = document.getElementById('menuEditRows');
+  const menuWarn = document.getElementById('menuWarn');
+  let menuDraft = [];
+  let menuEditorOpen = false;
+
+  function openMenuEditor(){
+    menuDraft = MEALS.map(m=> ({ id:m.id, name:m.name }));
+    if(menuDraft.length === 0) menuDraft.push({ id:newMealId(), name:'' });
+    menuWarn.textContent = '';
+    renderMenuEditRows();
+    menuEditorOpen = true;
+    menuOverlay.classList.add('open');
+  }
+
+  function renderMenuEditRows(){
+    menuEditRows.innerHTML = '';
+    menuDraft.forEach((item, idx)=>{
+      const row = document.createElement('div');
+      row.className = 'menu-edit-row';
+      row.innerHTML = `
+        <span class="drag-num">${idx+1}.</span>
+        <input type="text" class="menu-input" maxlength="60"
+               placeholder="Item name…"
+               value="${item.name.replace(/"/g,'&quot;')}"
+               aria-label="Menu item ${idx+1} name" />
+        <button class="menu-del-btn" aria-label="Remove menu item ${idx+1}"
+                ${menuDraft.length <= 1 ? 'disabled' : ''}>✕</button>
+      `;
+      row.querySelector('.menu-input').addEventListener('input', (e)=>{
+        menuDraft[idx].name = e.target.value;
+        e.target.classList.remove('invalid');
+        menuWarn.textContent = '';
+      });
+      row.querySelector('.menu-del-btn').addEventListener('click', ()=>{
+        if(menuDraft.length <= 1) return;
+        menuDraft.splice(idx, 1);
+        renderMenuEditRows();
+      });
+      menuEditRows.appendChild(row);
+    });
+  }
+
+  document.getElementById('menuAddBtn').addEventListener('click', ()=>{
+    if(menuDraft.length >= 12){
+      menuWarn.textContent = 'That is the maximum of 12 menu items.';
+      return;
+    }
+    menuDraft.push({ id:newMealId(), name:'' });
+    renderMenuEditRows();
+    const inputs = menuEditRows.querySelectorAll('.menu-input');
+    if(inputs.length) inputs[inputs.length-1].focus();
+  });
+
+  function closeMenuEditor(){
+    menuOverlay.classList.remove('open');
+    menuEditorOpen = false;
+  }
+  document.getElementById('menuClose').addEventListener('click', closeMenuEditor);
+  document.getElementById('menuCancelBtn').addEventListener('click', closeMenuEditor);
+  menuOverlay.addEventListener('click', (e)=>{ if(e.target === menuOverlay) closeMenuEditor(); });
+
+  document.getElementById('menuSaveBtn').addEventListener('click', async ()=>{
+    const inputs = Array.from(menuEditRows.querySelectorAll('.menu-input'));
+    let firstBad = -1;
+    menuDraft.forEach((item, idx)=>{
+      if(item.name.trim() === '' && firstBad === -1) firstBad = idx;
+    });
+    if(firstBad !== -1){
+      inputs[firstBad].classList.add('invalid');
+      inputs[firstBad].focus();
+      menuWarn.textContent = 'Every item needs a name before you can save.';
+      return;
+    }
+    const seen = new Set();
+    for(let i=0;i<menuDraft.length;i++){
+      const key = menuDraft[i].name.trim().toLowerCase();
+      if(seen.has(key)){
+        inputs[i].classList.add('invalid');
+        inputs[i].focus();
+        menuWarn.textContent = 'Two items have the same name — make them different.';
+        return;
+      }
+      seen.add(key);
+    }
+
+    MEALS = menuDraft.map(m=> ({ id:m.id, name:m.name.trim() }));
+    cacheMealNames();
+    MEALS.forEach(m=>{ if(typeof stockTotals[m.id] !== 'number') stockTotals[m.id] = 0; });
+
+    closeMenuEditor();
+    renderStockPanel();
+    refreshBoardColors();
+    if(reportOverlay.classList.contains('open')) renderReport();
+    await saveMenu();
+  });
+
+  async function saveMenu(){
+    if(!storageAvailable){
+      setStatus('Menu updated on this device — storage not available.');
+      return;
+    }
+    try{
+      await window.storage.set('menuItems', JSON.stringify(MEALS), true);
+      await window.storage.set('mealStock', JSON.stringify(stockTotals), true);
+      setStatus('Menu saved — everyone on this link will see it.');
+    }catch(err){
+      console.error('Menu save failed', err);
+      setStatus('Could not save the menu. Check your connection and try again.');
+    }
+  }
+
+  async function loadMenu(){
+    if(!storageAvailable) return;
+    try{
+      const res = await window.storage.get('menuItems', true);
+      if(res && res.value){
+        const parsed = JSON.parse(res.value);
+        if(Array.isArray(parsed) && parsed.length > 0){
+          MEALS = parsed
+            .filter(m=> m && m.id && typeof m.name === 'string')
+            .map(m=> ({ id:m.id, name:m.name }));
+          cacheMealNames();
+          MEALS.forEach(m=>{ if(typeof stockTotals[m.id] !== 'number') stockTotals[m.id] = 0; });
+        }
+      }
+    }catch(err){
+      // no saved menu yet — the defaults stand
+    }
+  }
+
+  // ---------- Reset ----------
+  const resetOverlay = document.getElementById('resetOverlay');
+  const resetBtn = document.getElementById('resetBtn');
+  const resetCancelBtn = document.getElementById('resetCancelBtn');
+  const resetConfirmBtn = document.getElementById('resetConfirmBtn');
+
+  resetBtn.addEventListener('click', ()=> resetOverlay.classList.add('open'));
+  resetCancelBtn.addEventListener('click', ()=> resetOverlay.classList.remove('open'));
+  resetOverlay.addEventListener('click', (e)=>{ if(e.target === resetOverlay) resetOverlay.classList.remove('open'); });
+
+  async function clearAllData(){
+    resetConfirmBtn.disabled = true;
+    resetConfirmBtn.textContent = 'Resetting…';
+
+    // Clear local state immediately so the board feels instant
+    Object.keys(orders).forEach(seat=> delete orders[seat]);
+    MEALS.forEach(m=> stockTotals[m.id] = 0);
+    refreshBoardColors();
+    renderStockPanel();
+    if(reportOverlay.classList.contains('open')) renderReport();
+
+    if(storageAvailable){
+      try{
+        const listResult = await window.storage.list('table:', true);
+        const keys = (listResult && listResult.keys) ? listResult.keys : [];
+        for(const key of keys){
+          try{ await window.storage.delete(key, true); }
+          catch(err){ console.error('Failed deleting', key, err); }
+        }
+        try{ await window.storage.delete('mealStock', true); }
+        catch(err){ /* fine if it never existed */ }
+        setStatus('Board reset — all tables and stock cleared for everyone.');
+      }catch(err){
+        console.error('Reset failed', err);
+        setStatus('Reset locally, but could not clear shared storage. Try again.');
+      }
+    } else {
+      setStatus('Board reset on this device — storage not available.');
+    }
+
+    resetConfirmBtn.disabled = false;
+    resetConfirmBtn.textContent = 'Yes, reset everything';
+    resetOverlay.classList.remove('open');
+  }
+
+  resetConfirmBtn.addEventListener('click', clearAllData);
+
+  // ---------- Auto-refresh ----------
+  const AUTO_REFRESH_MS = 5000;
+  setInterval(async ()=>{
+    if(pickerOverlay.classList.contains('open')) return;
+    if(kitchenDetailOverlay.classList.contains('open')) return;
+    if(menuEditorOpen) return;
+    if(stockPanelInteracting) return;
+    await loadMenu();
+    await loadAllOrders();
+    await loadStock();
+    refreshBoardColors();
+    renderStockPanel();
+    if(reportOverlay.classList.contains('open')) renderReport();
+  }, AUTO_REFRESH_MS);
+
+  // ---------- Init ----------
+  renderBoard();
+  renderStockPanel();
+  loadMenu()
+    .then(()=> Promise.all([loadAllOrders(), loadStock()]))
+    .then(()=>{
+      refreshBoardColors();
+      renderStockPanel();
+    });
+</script>
+</body>
+</html>
