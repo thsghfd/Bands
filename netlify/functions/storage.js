@@ -39,8 +39,17 @@ exports.handler = async (event) => {
 
   const { op, key, value, prefix } = payload;
 
+  const siteID = process.env.NETLIFY_SITE_ID;
+  const token = process.env.NETLIFY_BLOBS_TOKEN;
+  if (!siteID || !token) {
+    return json(500, {
+      error: 'Missing NETLIFY_SITE_ID or NETLIFY_BLOBS_TOKEN environment variable. ' +
+             'Add both in Site settings \u2192 Environment variables, then redeploy.',
+    });
+  }
+
   try {
-    const store = getStore(STORE_NAME);
+    const store = getStore({ name: STORE_NAME, siteID, token });
 
     if (op === 'get') {
       if (!key) return json(400, { error: 'Missing key' });
