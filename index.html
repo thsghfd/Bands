@@ -31,10 +31,78 @@
     color:var(--ink);
     font-family:'Inter', sans-serif;
     min-height:100vh;
+    padding: 32px 16px 80px;
+  }
+
+  .page-layout{
+    display:flex;
+    align-items:flex-start;
+    justify-content:flex-start;
+    gap:28px;
+    max-width:1200px;
+    margin:0 auto;
+  }
+  .main-col{
     display:flex;
     flex-direction:column;
     align-items:center;
-    padding: 32px 16px 80px;
+    flex:0 0 auto;
+  }
+  .activity-panel{
+    flex:1 1 260px;
+    max-width:320px;
+    position:sticky;
+    top:24px;
+    background:var(--paper-dim);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:16px;
+    box-shadow: 0 1px 0 #fff inset, 0 6px 18px rgba(43,42,37,0.06);
+    max-height: calc(100vh - 48px);
+    overflow-y:auto;
+  }
+  .activity-panel h3{
+    margin:0 0 12px;
+    font-family:'Courier Prime', monospace;
+    font-size:13px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+  }
+  .activity-list{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  .activity-empty{
+    font-size:13px;
+    color:var(--ink-soft);
+    font-style:italic;
+  }
+  .activity-row{
+    font-family:'Courier Prime', monospace;
+    font-size:12.5px;
+    line-height:1.5;
+    color:var(--ink);
+    border-bottom:1px dashed var(--line);
+    padding-bottom:8px;
+  }
+  .activity-row:last-child{ border-bottom:none; padding-bottom:0; }
+  .activity-row .a-table{ font-weight:700; }
+  .activity-row .a-ordered{ color:var(--tomato); }
+  .activity-row .a-delivered{ color:var(--sage); }
+
+  @media (max-width: 900px){
+    .page-layout{
+      flex-direction:column;
+      align-items:center;
+    }
+    .activity-panel{
+      max-width:520px;
+      width:100%;
+      position:static;
+      max-height:none;
+    }
   }
 
   header{
@@ -587,6 +655,9 @@
 </head>
 <body>
 
+<div class="page-layout">
+  <div class="main-col">
+
 <header>
   <div class="eyebrow">Order Board</div>
   <h1 id="pageTitle">Bands In Parks</h1>
@@ -616,6 +687,14 @@
   <button class="generate-btn" id="generateSummaryBtn">Generate summary</button>
   <button class="generate-btn" id="editMenuBtn" style="background:var(--mustard);">Edit menu</button>
   <button class="generate-btn" id="resetBtn" style="background:var(--tomato);">Reset</button>
+</div>
+
+  </div>
+
+  <aside class="activity-panel" id="activityPanel">
+    <h3>Activity</h3>
+    <div class="activity-list" id="activityList"></div>
+  </aside>
 </div>
 
 <!-- Order picker overlay (order-taker) -->
@@ -876,6 +955,83 @@
   // orders[tableNumber] = array of tickets: { id, m1,m2,m3,m4, customs, status:'pending'|'confirmed', createdAt }
   const orders = {};
   let activeSeat = null;
+
+  // ---------- Activity log ----------
+  // A running feed of "ordered" / "delivered" lines, shared across devices
+  // the same way orders are. Kept as its own small list so it's cheap to
+  // persist and cheap to poll.
+  const activityList = document.getElementById('activityList');
+  let activityLog = [];
+
+  function formatClockTime(ts){
+    const d = new Date(ts);
+    const hh = String(d.getHours()).padStart(2,'0');
+    const mm = String(d.getMinutes()).padStart(2,'0');
+    return hh + ':' + mm;
+  }
+
+  function logActivity(seat, rows, action){
+    const entries = rows.map(row=> ({
+      id: seat+'-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),
+      seat, qty: row.qty, name: row.name, action, ts: Date.now()
+    }));
+    if(entries.length === 0) return;
+    activityLog = activityLog.concat(entries);
+    renderActivityLog();
+    persistActivityLog(entries);
+  }
+
+  // Merges in any entries another device has already saved before writing,
+  // so two devices logging around the same moment don't clobber each other.
+  async function persistActivityLog(newEntries){
+    if(!storageAvailable) return;
+    try{
+      const res = await window.storage.get('activityLog', true);
+      let remote = [];
+      if(res && res.value){
+        try{ remote = JSON.parse(res.value); }catch(e){ remote = []; }
+      }
+      const existingIds = new Set(remote.map(e=> e.id));
+      const merged = remote.concat(newEntries.filter(e=> !existingIds.has(e.id)));
+      merged.sort((a,b)=> a.ts - b.ts);
+      activityLog = merged;
+      renderActivityLog();
+      await window.storage.set('activityLog', JSON.stringify(merged), true);
+    }catch(err){
+      console.error('Activity log save failed', err);
+    }
+  }
+
+  async function loadActivityLog(){
+    if(!storageAvailable) return;
+    try{
+      const res = await window.storage.get('activityLog', true);
+      if(res && res.value){
+        activityLog = JSON.parse(res.value);
+        renderActivityLog();
+      }
+    }catch(err){
+      console.error('Activity log load failed', err);
+    }
+  }
+
+  function renderActivityLog(){
+    if(activityLog.length === 0){
+      activityList.innerHTML = '<div class="activity-empty">Nothing ordered yet.</div>';
+      return;
+    }
+    activityList.innerHTML = activityLog.map(entry=>{
+      const cls = entry.action === 'delivered' ? 'a-delivered' : 'a-ordered';
+      return '<div class="activity-row">'
+        + '<span class="a-table">Table ' + entry.seat + '</span> — '
+        + entry.qty + ' x ' + entry.name.replace(/</g,'&lt;')
+        + ' <span class="' + cls + '">' + entry.action + '</span> '
+        + formatClockTime(entry.ts)
+        + '</div>';
+    }).join('');
+    activityList.scrollTop = activityList.scrollHeight;
+  }
+
   let editingTicketId = null; // id of the pending ticket being edited, or null for a brand-new one
   let draft = emptyItems();
   let mode = 'order';
@@ -1079,9 +1235,10 @@
   }
 
   // ---------- Board rendering ----------
+  const TABLE_COUNT = 60;
   function renderBoard(){
     board.innerHTML = '';
-    for(let i=1;i<=100;i++){
+    for(let i=1;i<=TABLE_COUNT;i++){
       const statusClass = tableStatusClass(i);
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -1268,6 +1425,7 @@
     orders[seat] = list;
     refreshBoardColors();
     renderStockPanel();
+    logActivity(seat, itemRows(items), 'ordered');
     closePicker();
     openSummary(seat);
     await saveOrder(seat, list);
@@ -1362,6 +1520,7 @@
     orders[seat] = list;
     kitchenDetailOverlay.classList.remove('open');
     refreshBoardColors();
+    logActivity(seat, itemRows(pending), 'delivered');
     await saveOrder(seat, list);
   });
 
@@ -1375,6 +1534,32 @@
   // ---------- Shared storage sync ----------
   const storageAvailable = typeof window.storage !== 'undefined';
 
+  // Every table's order still lives at its own 'table:N' key — safe, since
+  // two different tables being saved at once can never overwrite each
+  // other. Polling every table individually is what was expensive, so
+  // after each save we also rebuild one small combined snapshot that the
+  // auto-refresh loop can read in a single call, regardless of how many
+  // tables have orders. If two saves race and the snapshot is briefly out
+  // of date, the next save (or the next full rebuild) corrects it — the
+  // per-table keys, not the snapshot, are the source of truth.
+  async function rebuildOrdersSnapshot(){
+    const listResult = await window.storage.list('table:', true);
+    const keys = (listResult && listResult.keys) ? listResult.keys : [];
+    const snapshot = {};
+    for(const key of keys){
+      try{
+        const res = await window.storage.get(key, true);
+        if(res && res.value){
+          snapshot[key.split(':')[1]] = JSON.parse(res.value);
+        }
+      }catch(innerErr){
+        console.error('Failed reading', key, innerErr);
+      }
+    }
+    await window.storage.set('ordersSnapshot', JSON.stringify(snapshot), true);
+    return snapshot;
+  }
+
   async function saveOrder(seat, list){
     if(!storageAvailable){
       setStatus('Storage not available — this order is only saved on this device.');
@@ -1382,11 +1567,27 @@
     }
     try{
       await window.storage.set('table:'+seat, JSON.stringify(list), true);
+      await rebuildOrdersSnapshot();
       setStatus('Table ' + seat + ' saved — visible to everyone with this link.');
     }catch(err){
       console.error('Save failed', err);
       setStatus('Could not save Table ' + seat + '. Check your connection and try again.');
     }
+  }
+
+  function applySnapshot(snapshot){
+    let tableCount = 0;
+    Object.keys(snapshot).forEach(seatKey=>{
+      const seat = parseInt(seatKey, 10);
+      let parsed = snapshot[seatKey];
+      if(!Array.isArray(parsed)){
+        // defensive fallback for any older single-ticket format
+        parsed = parsed ? [{ ...emptyItems(), ...parsed, id:'t'+seat+'-legacy', status: parsed.status || 'pending' }] : [];
+      }
+      orders[seat] = parsed;
+      tableCount++;
+    });
+    setStatus(tableCount ? ('Synced ' + tableCount + ' table(s).') : 'No tables ordered yet.');
   }
 
   async function loadAllOrders(){
@@ -1395,27 +1596,17 @@
       return;
     }
     try{
-      const listResult = await window.storage.list('table:', true);
-      const keys = (listResult && listResult.keys) ? listResult.keys : [];
-      for(const key of keys){
-        try{
-          const res = await window.storage.get(key, true);
-          if(res && res.value){
-            const seat = parseInt(key.split(':')[1], 10);
-            let parsed = JSON.parse(res.value);
-            if(!Array.isArray(parsed)){
-              // defensive fallback for any older single-ticket format
-              parsed = parsed ? [{ ...emptyItems(), ...parsed, id:'t'+seat+'-legacy', status: parsed.status || 'pending' }] : [];
-            }
-            orders[seat] = parsed;
-          }
-        }catch(innerErr){
-          console.error('Failed reading', key, innerErr);
-        }
+      const res = await window.storage.get('ordersSnapshot', true);
+      if(res && res.value){
+        applySnapshot(JSON.parse(res.value));
+      } else {
+        // No snapshot yet (first run on a fresh site) — build one the
+        // slower way once, so every poll after this is cheap.
+        const snapshot = await rebuildOrdersSnapshot();
+        applySnapshot(snapshot);
       }
-      setStatus(keys.length ? ('Synced ' + keys.length + ' table(s).') : 'No tables ordered yet.');
     }catch(err){
-      console.error('List failed', err);
+      console.error('Load failed', err);
       setStatus('Could not load shared orders.');
     }
   }
@@ -1569,8 +1760,10 @@
     // Clear local state immediately so the board feels instant
     Object.keys(orders).forEach(seat=> delete orders[seat]);
     MEALS.forEach(m=> stockTotals[m.id] = 0);
+    activityLog = [];
     refreshBoardColors();
     renderStockPanel();
+    renderActivityLog();
     if(reportOverlay.classList.contains('open')) renderReport();
 
     if(storageAvailable){
@@ -1582,6 +1775,10 @@
           catch(err){ console.error('Failed deleting', key, err); }
         }
         try{ await window.storage.delete('mealStock', true); }
+        catch(err){ /* fine if it never existed */ }
+        try{ await window.storage.delete('ordersSnapshot', true); }
+        catch(err){ /* fine if it never existed */ }
+        try{ await window.storage.delete('activityLog', true); }
         catch(err){ /* fine if it never existed */ }
         setStatus('Board reset — all tables and stock cleared for everyone.');
       }catch(err){
@@ -1600,15 +1797,20 @@
   resetConfirmBtn.addEventListener('click', clearAllData);
 
   // ---------- Auto-refresh ----------
-  const AUTO_REFRESH_MS = 5000;
+  // Now that loadAllOrders reads one snapshot key instead of listing and
+  // fetching every table, each cycle is cheap (2 calls total, regardless
+  // of table count). The menu is loaded once at startup and whenever the
+  // Edit menu button is used — it isn't polled here at all, since it
+  // doesn't change mid-event.
+  const AUTO_REFRESH_MS = 15000;
   setInterval(async ()=>{
     if(pickerOverlay.classList.contains('open')) return;
     if(kitchenDetailOverlay.classList.contains('open')) return;
     if(menuEditorOpen) return;
     if(stockPanelInteracting) return;
-    await loadMenu();
     await loadAllOrders();
     await loadStock();
+    await loadActivityLog();
     refreshBoardColors();
     renderStockPanel();
     if(reportOverlay.classList.contains('open')) renderReport();
@@ -1617,8 +1819,9 @@
   // ---------- Init ----------
   renderBoard();
   renderStockPanel();
+  renderActivityLog();
   loadMenu()
-    .then(()=> Promise.all([loadAllOrders(), loadStock()]))
+    .then(()=> Promise.all([loadAllOrders(), loadStock(), loadActivityLog()]))
     .then(()=>{
       refreshBoardColors();
       renderStockPanel();
