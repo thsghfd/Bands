@@ -925,10 +925,13 @@
     MEALS.forEach(m=>{
       if(items[m.id] > 0) rows.push({ name: m.name, qty: items[m.id] });
     });
-    // Any quantity recorded against an item that has since been taken off the menu
+    // Any quantity recorded against an item that has since been taken off the menu.
+    // Ticket objects also carry non-item fields (id, status, createdAt) — those
+    // are metadata, not menu quantities, so they're explicitly excluded here.
     const liveIds = new Set(MEALS.map(m=> m.id));
+    const metaKeys = new Set(['customs', 'id', 'status', 'createdAt']);
     Object.keys(items).forEach(key=>{
-      if(key === 'customs' || liveIds.has(key)) return;
+      if(metaKeys.has(key) || liveIds.has(key)) return;
       if(typeof items[key] === 'number' && items[key] > 0){
         rows.push({ name: (mealNameCache[key] || 'Removed item') + ' (off menu)', qty: items[key] });
       }
