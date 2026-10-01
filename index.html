@@ -1666,6 +1666,10 @@
   }
 
   function applySnapshot(snapshot){
+    // Fully replace local state from the snapshot — don't just merge in
+    // what's present, or a table cleared remotely (e.g. by Reset) would
+    // keep showing its old order on any device that already had it loaded.
+    Object.keys(orders).forEach(seat=> delete orders[seat]);
     let tableCount = 0;
     Object.keys(snapshot).forEach(seatKey=>{
       const seat = parseInt(seatKey, 10);
@@ -1674,8 +1678,10 @@
         // defensive fallback for any older single-ticket format
         parsed = parsed ? [{ ...emptyItems(), ...parsed, id:'t'+seat+'-legacy', status: parsed.status || 'pending' }] : [];
       }
-      orders[seat] = parsed;
-      tableCount++;
+      if(parsed.length > 0){
+        orders[seat] = parsed;
+        tableCount++;
+      }
     });
     setStatus(tableCount ? ('Synced ' + tableCount + ' table(s).') : 'No tables ordered yet.');
   }
