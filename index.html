@@ -547,6 +547,36 @@
   }
   .generate-btn:hover{ filter:brightness(1.15); }
   .generate-btn:active{ transform: scale(.98); }
+  .generate-btn:disabled{
+    opacity:.4;
+    cursor:not-allowed;
+    filter:none;
+  }
+  .generate-btn:disabled:hover{ filter:none; }
+
+  .event-status{
+    font-family:'Courier Prime', monospace;
+    font-size:12.5px;
+    letter-spacing:.03em;
+    text-align:center;
+    padding:8px 14px;
+    border-radius:7px;
+    margin-top:18px;
+    margin-bottom:2px;
+    border:1px solid var(--line);
+    background:var(--paper-dim);
+    color:var(--ink-soft);
+  }
+  .event-status.running{
+    color:#2f5b3f;
+    background:#eaf3ec;
+    border-color:#bfe0c9;
+  }
+  .event-status.stopped{
+    color:#7a4a1f;
+    background:#fbeee0;
+    border-color:#f0d2ad;
+  }
 
   .report-block{
     padding:12px 0;
@@ -675,6 +705,12 @@
   <span><span class="swatch confirmed"></span>All caught up</span>
 </div>
 
+<div class="event-status" id="eventStatusBadge">Checking event status…</div>
+<div style="display:flex; gap:12px; flex-wrap:wrap; justify-content:center; margin-bottom:18px;">
+  <button class="generate-btn" id="startEventBtn" style="background:var(--sage);">▶ Start Event</button>
+  <button class="generate-btn" id="stopEventBtn" style="background:var(--tomato);">■ Stop Event</button>
+</div>
+
 <div class="board" id="board" role="grid" aria-label="Table grid"></div>
 <div class="status-line" id="statusLine"></div>
 
@@ -695,6 +731,26 @@
     <h3>Activity</h3>
     <div class="activity-list" id="activityList"></div>
   </aside>
+</div>
+
+<!-- Event-not-started warning -->
+<div class="overlay" id="eventWarningOverlay">
+  <div class="ticket" role="dialog" aria-modal="true" aria-labelledby="eventWarningTitle" style="max-width:360px;">
+    <div class="ticket-head">
+      <div>
+        <div class="eyebrow">Heads up</div>
+        <h2 id="eventWarningTitle">Event hasn't started</h2>
+      </div>
+    </div>
+    <p style="font-size:14px; line-height:1.5; color:var(--ink-soft); margin:0 0 4px;">
+      Nobody has pressed <strong>Start Event</strong> yet, so this order won't sync to other
+      devices or the kitchen until it's running.
+    </p>
+    <div class="ticket-foot">
+      <button class="btn ghost" id="eventWarningCancelBtn">Cancel</button>
+      <button class="btn primary" id="eventWarningContinueBtn">Continue anyway</button>
+    </div>
+  </div>
 </div>
 
 <!-- Order picker overlay (order-taker) -->
@@ -1288,6 +1344,14 @@
 
   // ---------- Order-taker picker ----------
   function openPicker(seat){
+    if(!isEventRunning){
+      showEventWarning(()=> openPickerConfirmed(seat));
+      return;
+    }
+    openPickerConfirmed(seat);
+  }
+
+  function openPickerConfirmed(seat){
     activeSeat = seat;
     const pending = getPendingTicket(seat);
     const confirmed = getConfirmedTickets(seat);
@@ -1532,6 +1596,29 @@
     ov.addEventListener('click', (e)=>{
       if(e.target === ov) ov.classList.remove('open');
     });
+  });
+
+  // ---------- Event-not-started warning ----------
+  const eventWarningOverlay = document.getElementById('eventWarningOverlay');
+  let eventWarningCallback = null;
+
+  function showEventWarning(onContinue){
+    eventWarningCallback = onContinue;
+    eventWarningOverlay.classList.add('open');
+  }
+  function dismissEventWarning(){
+    eventWarningOverlay.classList.remove('open');
+    eventWarningCallback = null;
+  }
+  document.getElementById('eventWarningCancelBtn').addEventListener('click', dismissEventWarning);
+  document.getElementById('eventWarningContinueBtn').addEventListener('click', ()=>{
+    const cb = eventWarningCallback;
+    eventWarningOverlay.classList.remove('open');
+    eventWarningCallback = null;
+    if(cb) cb();
+  });
+  eventWarningOverlay.addEventListener('click', (e)=>{
+    if(e.target === eventWarningOverlay) dismissEventWarning();
   });
 
   // ---------- Shared storage sync ----------
@@ -1799,35 +1886,115 @@
 
   resetConfirmBtn.addEventListener('click', clearAllData);
 
-  // ---------- Auto-refresh ----------
-  // Now that loadAllOrders reads one snapshot key instead of listing and
-  // fetching every table, each cycle is cheap (2 calls total, regardless
-  // of table count). The menu is loaded once at startup and whenever the
-  // Edit menu button is used — it isn't polled here at all, since it
-  // doesn't change mid-event.
+  // ---------- Live polling (gated by Start/Stop Event) ----------
+  // Nothing is fetched on a timer unless the event has been explicitly
+  // started. This is what stops a forgotten, long-left-open browser tab
+  // from quietly burning function calls for days after an event ends —
+  // which is exactly what happened before this was added.
   const AUTO_REFRESH_MS = 15000;
-  setInterval(async ()=>{
+  let isEventRunning = false;
+  let pollIntervalId = null;
+
+  const eventStatusBadge = document.getElementById('eventStatusBadge');
+  const startEventBtn = document.getElementById('startEventBtn');
+  const stopEventBtn = document.getElementById('stopEventBtn');
+
+  function updateEventUI(){
+    startEventBtn.disabled = isEventRunning;
+    stopEventBtn.disabled = !isEventRunning;
+    eventStatusBadge.classList.remove('running','stopped');
+    if(isEventRunning){
+      eventStatusBadge.classList.add('running');
+      eventStatusBadge.textContent = 'Event running — live updates every 15s.';
+    } else {
+      eventStatusBadge.classList.add('stopped');
+      eventStatusBadge.textContent = 'Event stopped — no automatic updates until Start Event is pressed.';
+    }
+  }
+
+  async function pollCycle(){
     if(pickerOverlay.classList.contains('open')) return;
     if(kitchenDetailOverlay.classList.contains('open')) return;
     if(menuEditorOpen) return;
     if(stockPanelInteracting) return;
+
+    // Cheap check first: if someone stopped the event from another device,
+    // this device stops polling too, within one cycle — so a device nobody
+    // remembered to close still shuts itself down shortly after.
+    if(storageAvailable){
+      try{
+        const flagRes = await window.storage.get('eventRunning', true);
+        if(flagRes && flagRes.value === 'false'){
+          stopPolling();
+          return;
+        }
+      }catch(err){ /* if this check fails, carry on with the cycle anyway */ }
+    }
+
     await loadAllOrders();
     await loadStock();
     await loadActivityLog();
     refreshBoardColors();
     renderStockPanel();
     if(reportOverlay.classList.contains('open')) renderReport();
-  }, AUTO_REFRESH_MS);
+  }
+
+  function startPolling(){
+    if(pollIntervalId) return;
+    pollIntervalId = setInterval(pollCycle, AUTO_REFRESH_MS);
+  }
+
+  function stopPolling(){
+    if(pollIntervalId){
+      clearInterval(pollIntervalId);
+      pollIntervalId = null;
+    }
+    isEventRunning = false;
+    updateEventUI();
+  }
+
+  startEventBtn.addEventListener('click', async ()=>{
+    isEventRunning = true;
+    updateEventUI();
+    if(storageAvailable){
+      try{ await window.storage.set('eventRunning', 'true', true); }
+      catch(err){ console.error('Could not save event state', err); }
+    }
+    startPolling();
+    await pollCycle();
+    setStatus('Event started — live updates every 15 seconds.');
+  });
+
+  stopEventBtn.addEventListener('click', async ()=>{
+    stopPolling();
+    if(storageAvailable){
+      try{ await window.storage.set('eventRunning', 'false', true); }
+      catch(err){ console.error('Could not save event state', err); }
+    }
+    setStatus('Event stopped — automatic updates paused on every device.');
+  });
 
   // ---------- Init ----------
   renderBoard();
   renderStockPanel();
   renderActivityLog();
+  updateEventUI();
   loadMenu()
     .then(()=> Promise.all([loadAllOrders(), loadStock(), loadActivityLog()]))
     .then(()=>{
       refreshBoardColors();
       renderStockPanel();
+    })
+    .then(async ()=>{
+      if(!storageAvailable) return;
+      try{
+        const res = await window.storage.get('eventRunning', true);
+        if(res && res.value === 'true'){
+          isEventRunning = true;
+          startPolling();
+        }
+      }catch(err){ /* default to stopped if this check fails */ }
+      updateEventUI();
     });
 </script>
 </body>
