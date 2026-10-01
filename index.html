@@ -1065,10 +1065,12 @@
     if(!storageAvailable) return;
     try{
       const res = await window.storage.get('activityLog', true);
-      if(res && res.value){
-        activityLog = JSON.parse(res.value);
-        renderActivityLog();
-      }
+      const remoteLog = (res && res.value) ? JSON.parse(res.value) : [];
+      // Always replace local state, even with an empty list — otherwise a
+      // Reset on another device (which deletes this key) never clears the
+      // feed here until the page is reloaded.
+      activityLog = remoteLog;
+      renderActivityLog();
     }catch(err){
       console.error('Activity log load failed', err);
     }
